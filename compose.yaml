@@ -1,0 +1,36 @@
+services:
+  classbot:
+    build:
+      context: .
+      args:
+        INSTALL_OCR: "${INSTALL_OCR:-false}"
+    image: classbot:latest
+    container_name: classbot
+    restart: unless-stopped
+    env_file: .env
+    # ホスト側ディレクトリの所有者を UID/GID 10001 にしておくこと（README 参照）
+    volumes:
+      - ./materials:/app/materials        # 授業資料（ホストから編集可）
+      - ./data:/app/data                  # SQLite・Slack登録資料・ゴミ箱・バックアップ
+      - ./config:/app/config:ro           # system_prompt.md / pricing.toml
+    read_only: true
+    init: true                            # 抽出用子プロセスのゾンビを回収
+    pids_limit: 256                       # fork 爆弾対策
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "classbot", "healthcheck"]
+      interval: 60s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

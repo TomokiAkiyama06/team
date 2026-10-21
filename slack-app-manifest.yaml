@@ -1,0 +1,28 @@
+# Slack アプリ作成用マニフェスト（https://api.slack.com/apps → Create New App → From an app manifest）
+display_information:
+  name: ClaudeBot
+  description: 授業資料を検索して質問に答える AI アシスタント
+  background_color: "#3b3b3b"
+features:
+  bot_user:
+    display_name: ClaudeBot
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read   # @メンションの受信
+      - channels:history    # 公開チャンネルのスレッド内追加質問・ファイル共有の受信
+      - groups:history      # 授業チャンネルが非公開チャンネルの場合（公開なら削除可）
+      - chat:write          # 回答の投稿・更新、管理者へのエフェメラル通知
+      - files:read          # 管理者が添付した資料・学生の質問画像のダウンロード（files.info / url_private_download）
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels    # スレッド内の追加質問（画像付きを含む）・メンションと別イベントの添付
+      - message.groups      # 非公開チャンネルの場合（公開なら削除可）
+  interactivity:
+    is_enabled: true        # 資料削除の確認ボタン・ページ送り
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
