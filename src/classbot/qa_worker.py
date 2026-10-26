@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from classbot.access import NOT_ALLOWED_MSG, AccessList
 from classbot.budget import BudgetManager, Rejection
 from classbot.images import ImageError, ImageStore, StoredImage, fetch_slack_image, normalize_image
 from classbot.citations import parse_answer
@@ -47,6 +48,7 @@ class QAWorker:
         self._thread_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.retry_delay = 5.0
         self.images = ImageStore(db, settings)
+        self.access = AccessList(db, settings)
 
     async def run(self, wake: asyncio.Event, stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -96,6 +98,11 @@ class QAWorker:
             await self._deliver(key, channel, prog["placeholder_ts"], thread_ts, prog["answer_text"])
             return
         msg_ts = prog["placeholder_ts"] if prog is not None else None
+
+        if not await self.db.run(self.access.is_allowed, user):
+            # 受付後に制限を有効にした・登録を外した場合（再起動で再実行された質問など）も API は呼ばない
+            await self._finish(key, channel, msg_ts, thread_ts, NOT_ALLOWED_MSG)
+            return
 
         if age_sec > self.s.qa_job_max_age_min * 60:
             # 再起動などで大きく遅れた質問は、古い文脈で回答せず再質問を促す

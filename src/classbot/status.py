@@ -52,6 +52,9 @@ def format_status(settings: Settings, db: Database, store: MaterialStore, queue:
     jobs = queue.counts()
     uptime = int(time.time() - runtime.get("started_at", time.time()))
     db_size = settings.db_path.stat().st_size if settings.db_path.exists() else 0
+    registered = db.query_one("SELECT COUNT(*) AS n FROM allowed_users")["n"]
+    access = (f"有効（Slack で登録 {registered}人 ＋ .env で許可 {len(settings.slack_allowed_user_ids)}人 ＋ 管理者）"
+              if settings.slack_restrict_users else "無効（チャンネルの全員が使えます）")
     mat = " / ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "なし"
     job = " / ".join(f"{k} {v}" for k, v in sorted(jobs.items())) or "なし"
     return "\n".join([
@@ -59,6 +62,7 @@ def format_status(settings: Settings, db: Database, store: MaterialStore, queue:
         f"• 稼働時間: {uptime // 3600}時間{uptime % 3600 // 60}分",
         f"• Slack 接続: {'接続中' if runtime.get('slack_connected') else '未接続'}",
         f"• モデル: `{settings.claude_model}`（effort: {settings.claude_effort}）",
+        f"• 利用者の制限: {access}",
         f"• 資料: {mat}",
         f"• ジョブ: {job}",
         f"• 最終スキャン: {runtime.get('last_scan_at', '-')}（{runtime.get('last_scan_summary', '')}）",

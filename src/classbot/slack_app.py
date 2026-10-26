@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from slack_bolt.async_app import AsyncApp
 
 from classbot import commands
+from classbot.access import NOT_ALLOWED_MSG, AccessList, user_ids_in
 from classbot.budget import BudgetManager
 from classbot.config import Settings
 from classbot.db import Database, now_iso, utcnow
@@ -27,8 +29,14 @@ from classbot.status import format_status, format_usage
 log = logging.getLogger(__name__)
 
 ADMIN_ONLY_MSG = "この操作は管理者のみ実行できます。"
+RESTRICT_OFF_NOTE = ("⚠️ 現在は利用者の制限が無効です（チャンネルの全員が使えます）。登録した人だけに限るには、"
+                     ".env で `SLACK_RESTRICT_USERS=true` にして再起動してください。")
 DEFAULT_IMAGE_QUESTION = "添付した画像について説明してください。"
 IMAGE_FORMATS = "PNG / JPEG / WebP / GIF（GIF アニメーションは最初のフレームのみ）"
+
+
+def _mentions(user_ids: list[str]) -> str:
+    return " ".join(f"<@{u}>" for u in user_ids)
 
 
 def split_files(files: list[dict] | None) -> tuple[list[dict], list[dict], list[dict]]:
@@ -58,6 +66,7 @@ class SlackHandlers:
         self.store = store
         self.budget = budget
         self.runtime = runtime  # bot_user_id, started_at, slack_connected など
+        self.access = AccessList(db, settings)
         self.bot_user_id: str = runtime.get("bot_user_id", "")
 
     # ------------------------------------------------------------------ 共通
@@ -105,6 +114,11 @@ class SlackHandlers:
     async def _reply(self, client, channel: str, thread_ts: str, text: str, **kw) -> None:
         await client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text, **kw)
 
+    async def _ephemeral(self, client, event: dict, text: str) -> None:
+        """投稿した本人にだけ見える返信（スレッド内の投稿にはスレッド内で返す）。"""
+        kw = {"thread_ts": event["thread_ts"]} if event.get("thread_ts") else {}
+        await client.chat_postEphemeral(channel=event["channel"], user=event["user"], text=text, **kw)
+
     # ------------------------------------------------------------------ イベント
     async def on_app_mention(self, event: dict, client) -> None:
         channel, user, ts = event.get("channel"), event.get("user"), event.get("ts")
@@ -113,6 +127,12 @@ class SlackHandlers:
         if not self._team_ok(event.get("user_team") or event.get("team")):
             return
         if await self.db.run(self._seen, channel, ts):
+            return
+        if not await self.db.run(self.access.is_allowed, user):
+            # 登録されていない人には本人にだけ案内し、API は呼ばない（費用がかからない）
+            if await self.db.run(self._claim, channel, ts):  # 再送で同じ案内を繰り返さない
+                log.info("user not allowed", extra={"user": user})
+                await self._ephemeral(client, event, NOT_ALLOWED_MSG)
             return
         thread_ts = event.get("thread_ts") or ts
         text = event.get("text", "")
@@ -152,6 +172,8 @@ class SlackHandlers:
         thread_ts = event.get("thread_ts")
         if not thread_ts or thread_ts == ts or not await self.db.run(self._is_bot_thread, channel, thread_ts):
             return  # 無関係な通常会話には割り込まない（添付ファイルも取得・記録しない）
+        if not await self.db.run(self.access.is_allowed, user):
+            return  # 登録されていない人の書き込みは、ボットのスレッド内でも質問として扱わない
         if not text.strip() and not files:
             return
         if await self.db.run(self._seen, channel, ts):
@@ -384,6 +406,51 @@ class SlackHandlers:
         elif cmd.name == commands.STATUS:
             text = await self.db.run(format_status, self.s, self.db, self.store, self.queue, self.runtime)
             await self._reply(client, channel, thread_ts, text)
+
+        elif cmd.name in (commands.USER_ADD, commands.USER_REMOVE):
+            # 利用者の管理は公開チャンネルでも他の人に見えないよう、実行した管理者にだけ返す
+            add = cmd.name == commands.USER_ADD
+            ids = user_ids_in(event.get("text", ""), exclude=self.bot_user_id)
+            if not ids:
+                await self._ephemeral(client, event, "対象のユーザーをメンションしてください（例: `"
+                                      + ("利用者追加" if add else "利用者削除") + " @山田 @佐藤`）。")
+                return
+            if add:
+                done = await self.db.run(self.access.add, ids, user)
+                lines = [f"✅ 利用者を追加しました: {_mentions(done)}" if done else "新しく追加した利用者はいません。"]
+                if rest := [i for i in ids if i not in done]:
+                    lines.append(f"登録済み: {_mentions(rest)}")
+            else:
+                done = await self.db.run(self.access.remove, ids)
+                lines = [f"🗑 利用者の登録を解除しました: {_mentions(done)}" if done else "登録を解除した利用者はいません。"]
+                fixed = [i for i in ids if i not in done
+                         and (self.s.is_admin(i) or i in self.s.slack_allowed_user_ids)]
+                if fixed:
+                    lines.append(f"{_mentions(fixed)} は .env（SLACK_ADMIN_USER_IDS / SLACK_ALLOWED_USER_IDS）で"
+                                 "許可されているため、Slack からは外せません。")
+                if missing := [i for i in ids if i not in done and i not in fixed]:
+                    lines.append(f"登録されていません: {_mentions(missing)}")
+            log.info("allowed users changed", extra={"action": cmd.name, "by": user, "users": done})
+            if not self.s.slack_restrict_users:
+                lines.append(RESTRICT_OFF_NOTE)
+            await self._ephemeral(client, event, "\n".join(lines))
+
+        elif cmd.name == commands.USER_LIST:
+            await self._ephemeral(client, event, await self.db.run(self.user_list_text))
+
+    def user_list_text(self) -> str:
+        tz = ZoneInfo(self.s.timezone)
+        rows = self.access.registered()
+        lines = ["*利用者の制限*: " + ("有効（登録した人だけが使えます）" if self.s.slack_restrict_users
+                                     else "無効（チャンネルの全員が使えます）"),
+                 f"*管理者（.env）*: {_mentions(self.s.slack_admin_user_ids) or 'なし'}",
+                 f"*.env で許可*: {_mentions(self.s.slack_allowed_user_ids) or 'なし'}",
+                 f"*Slack で登録（{len(rows)}人）*:"]
+        lines += [f"• <@{r['user_id']}>（{datetime.fromisoformat(r['created_at']).astimezone(tz):%Y-%m-%d} 登録・"
+                  f"登録者 <@{r['added_by']}>）" for r in rows] or ["• なし"]
+        if not self.s.slack_restrict_users:
+            lines.append(RESTRICT_OFF_NOTE)
+        return "\n".join(lines)
 
     def list_page(self, page: int) -> list[dict]:
         size = self.s.list_page_size

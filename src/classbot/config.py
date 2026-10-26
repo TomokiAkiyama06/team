@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     slack_admin_user_ids: Annotated[list[str], NoDecode] = Field(default_factory=list)
     # 設定するとこのワークスペース（T...）以外のユーザーからのイベント・操作を無視する（Slack Connect 対策）
     slack_team_id: str = ""
+    # true にすると、管理者・SLACK_ALLOWED_USER_IDS・Slack の「利用者追加」で登録した人だけが使える
+    # （チャンネルを公開にしても、登録していない人の質問では API を呼ばない）
+    slack_restrict_users: bool = False
+    slack_allowed_user_ids: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # --- Anthropic ---
     anthropic_api_key: SecretStr = SecretStr("")
@@ -110,7 +114,7 @@ class Settings(BaseSettings):
         # 21枚以上だと API の画像ごとの寸法上限が 2000px に厳しくなるため 20 枚までに制限する
         return max(0, min(int(v), 20))
 
-    @field_validator("slack_admin_user_ids", mode="before")
+    @field_validator("slack_admin_user_ids", "slack_allowed_user_ids", mode="before")
     @classmethod
     def _split_ids(cls, v: object) -> object:
         if isinstance(v, str):

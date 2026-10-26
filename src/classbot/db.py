@@ -219,6 +219,12 @@ CREATE TABLE IF NOT EXISTS thread_materials (
     PRIMARY KEY (channel, thread_ts, material_id)
 );
 CREATE INDEX IF NOT EXISTS ix_thread_materials_material ON thread_materials(material_id);
+-- 利用を許可したユーザー（SLACK_RESTRICT_USERS=true のとき有効。管理者が Slack の「利用者追加」で登録）
+CREATE TABLE IF NOT EXISTS allowed_users (
+    user_id TEXT PRIMARY KEY,
+    added_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS recent_admin_files (
     file_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
