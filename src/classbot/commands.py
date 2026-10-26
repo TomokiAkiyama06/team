@@ -18,6 +18,9 @@ DELETE = "delete"
 REINDEX = "reindex"
 USAGE = "usage"
 STATUS = "status"
+USER_ADD = "user_add"
+USER_REMOVE = "user_remove"
+USER_LIST = "user_list"
 
 _ALIASES: dict[str, str] = {
     "ヘルプ": HELP, "help": HELP, "使い方": HELP,
@@ -28,10 +31,13 @@ _ALIASES: dict[str, str] = {
     "再インデックス": REINDEX, "reindex": REINDEX,
     "利用状況": USAGE,
     "ステータス": STATUS, "status": STATUS,
+    "利用者追加": USER_ADD,
+    "利用者削除": USER_REMOVE,
+    "利用者一覧": USER_LIST,
 }
 
 # ヘルプ以外は管理者専用
-ADMIN_ONLY = {LIST, UPLOAD, UPDATE, DELETE, REINDEX, USAGE, STATUS}
+ADMIN_ONLY = {LIST, UPLOAD, UPDATE, DELETE, REINDEX, USAGE, STATUS, USER_ADD, USER_REMOVE, USER_LIST}
 
 _MENTION_RE = re.compile(r"<@[A-Z0-9]+(?:\|[^>]*)?>")
 
@@ -73,4 +79,5 @@ HELP_TEXT = """*授業AIアシスタントの使い方*
 
 *管理者コマンド*
 • `資料一覧 [ページ]` / `資料登録`（ファイルを添付） / `資料更新 <ID>`（ファイルを添付）
-• `資料削除 [ID]` / `再インデックス [ID]` / `利用状況` / `ステータス`"""
+• `資料削除 [ID]` / `再インデックス [ID]` / `利用状況` / `ステータス`
+• `利用者追加 @ユーザー …` / `利用者削除 @ユーザー …` / `利用者一覧`（`SLACK_RESTRICT_USERS=true` のとき、登録した人だけが使えます。結果は実行した管理者にだけ表示）"""
