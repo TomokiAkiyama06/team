@@ -127,3 +127,14 @@ def test_status_shows_restriction(restricted):
     AccessList(restricted.db, restricted.s).add(["U1", "U2"], "UADMIN")
     text = format_status(restricted.s, restricted.db, restricted.store, restricted.queue, {})
     assert "利用者の制限: 有効（Slack で登録 2人 ＋ .env で許可 1人 ＋ 管理者）" in text
+
+
+async def test_remove_warns_when_env_grant_remains(restricted):
+    """.env でも許可されている人の Slack 登録を外したら、引き続き使えることを伝える（PR #2 レビュー指摘）。"""
+    AccessList(restricted.db, restricted.s).add(["UENV", "UADMIN"], "UADMIN")
+    await restricted.h.on_app_mention(mention("利用者削除 <@UENV> <@UADMIN>", user="UADMIN", ts="1.0"),
+                                      restricted.slack)
+    text = restricted.slack.ephemerals[-1]["text"]
+    assert "解除しました: <@UENV> <@UADMIN>" in text
+    assert "<@UENV> <@UADMIN> は .env" in text and "引き続き使えます" in text
+    assert AccessList(restricted.db, restricted.s).is_allowed("UENV")

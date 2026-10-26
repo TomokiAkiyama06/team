@@ -423,11 +423,11 @@ class SlackHandlers:
             else:
                 done = await self.db.run(self.access.remove, ids)
                 lines = [f"🗑 利用者の登録を解除しました: {_mentions(done)}" if done else "登録を解除した利用者はいません。"]
-                fixed = [i for i in ids if i not in done
-                         and (self.s.is_admin(i) or i in self.s.slack_allowed_user_ids)]
+                # Slack の登録を外せたかどうかに関係なく、.env の許可が残る人は引き続き使えることを伝える
+                fixed = [i for i in ids if self.s.is_admin(i) or i in self.s.slack_allowed_user_ids]
                 if fixed:
                     lines.append(f"{_mentions(fixed)} は .env（SLACK_ADMIN_USER_IDS / SLACK_ALLOWED_USER_IDS）で"
-                                 "許可されているため、Slack からは外せません。")
+                                 "許可されているため、引き続き使えます（Slack からは外せません）。")
                 if missing := [i for i in ids if i not in done and i not in fixed]:
                     lines.append(f"登録されていません: {_mentions(missing)}")
             log.info("allowed users changed", extra={"action": cmd.name, "by": user, "users": done})
