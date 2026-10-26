@@ -22,6 +22,11 @@ _LEADING_ZERO_RE = re.compile(r"(?<![0-9.])0+(?=[0-9])")
 _SPLIT_RE = re.compile(r"[\s　、。，．,.!?！？「」『』（）()\[\]【】〔〕<>＜＞:：;；/／\\・…\-─—=+*#|~^\"'`]+")
 _ASCII_WORD_RE = re.compile(r"[a-z0-9_]+")
 _HIRAGANA_ONLY_RE = re.compile(r"^[ぁ-ゟ]+$")
+# 質問文によく出るが、どの資料・箇所かの手掛かりにならない語（bi-gram）。
+# 「今回渡した資料の授業内容を教えて」のような質問で、これらが資料に無いために
+# 被覆率が下がり、関連チャンクが足切りされるのを防ぐ（検索語からのみ除く。索引は変えない）
+GENERIC_QUERY_BIGRAMS = frozenset({"資料", "授業", "内容", "今回", "教え", "質問", "説明", "知り",
+                                   "解説", "要約", "詳し", "簡単"})
 
 
 def _kanji_to_int(s: str) -> str:
@@ -63,8 +68,8 @@ def index_tokens(text: str) -> str:
 
 
 def query_tokens(text: str) -> list[str]:
-    """検索用トークン（重複除去・順序保持）。ひらがなのみの bi-gram
-    （助詞など）は精度を下げるため、他に手掛かりがある場合は除外する。"""
+    """検索用トークン（重複除去・順序保持）。ひらがなのみの bi-gram（助詞など）と
+    質問によく出る一般語（GENERIC_QUERY_BIGRAMS）は精度を下げるため、他に手掛かりがある場合は除外する。"""
     toks: list[str] = []
     for seg in _segments(normalize(text)):
         toks.extend(_bigrams(seg))
@@ -74,7 +79,8 @@ def query_tokens(text: str) -> list[str]:
         seen.setdefault(t, None)
     uniq = list(seen)
     content = [t for t in uniq if not _HIRAGANA_ONLY_RE.match(t)]
-    return content or uniq
+    specific = [t for t in content if t not in GENERIC_QUERY_BIGRAMS]
+    return specific or content or uniq
 
 
 def fts_match_expr(tokens: list[str]) -> str:

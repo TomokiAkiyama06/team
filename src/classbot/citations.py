@@ -43,16 +43,19 @@ class ParsedAnswer:
 
 
 def _format_footer(hits: list[SearchHit]) -> str:
-    """同じ資料・同じ位置はまとめ、1資料位置につき1行で表示する。"""
-    groups: dict[tuple[int, str], list[SearchHit]] = {}
+    """1資料につき1行で表示する。同じ位置の出典はまとめ、位置は「、」で並べる
+    （例: 出典：第4回.pdf p.1 [S1]、p.3 [S3][S4]）。"""
+    groups: dict[int, dict[str, list[SearchHit]]] = {}
     for h in hits:
-        groups.setdefault((h.material_id, h.location), []).append(h)
+        groups.setdefault(h.material_id, {}).setdefault(h.location, []).append(h)
     lines = []
-    for group in groups.values():
-        h = group[0]
-        ids = "".join(f"[{g.source_id}]" for g in group)
-        loc = f" {h.location}" if h.location else ""
-        lines.append(f"出典：{h.display_name}{loc} {ids}")
+    for by_loc in groups.values():
+        name = next(iter(by_loc.values()))[0].display_name
+        parts = []
+        for loc, group in by_loc.items():
+            ids = "".join(f"[{g.source_id}]" for g in group)
+            parts.append(f"{loc} {ids}" if loc else ids)
+        lines.append(f"出典：{name} {'、'.join(parts)}")
     return "\n".join(lines)
 
 

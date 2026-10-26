@@ -7,7 +7,8 @@ def test_system_prompt_has_protocol(settings):
     sp = build_system_prompt(settings.system_prompt_file)
     assert sp.endswith(CITATION_PROTOCOL)
     assert "<!--" not in sp
-    assert "登録された資料からは確認できませんでした" in sp
+    assert "登録資料に該当する記述が見つからなかったため、AIの一般知識で回答します" in sp
+    assert "資料には記載がありません" in sp
 
 
 def test_missing_system_prompt_falls_back(tmp_path):
@@ -44,3 +45,19 @@ def test_build_messages_merges_trailing_user():
     assert len(msgs) == 1 and msgs[0]["role"] == "user"
     assert 'status="none"' in msgs[0]["content"]
     assert estimate_input_chars("sys", msgs) > len("次の質問")
+
+
+def test_focus_materials_rendered_with_source_range():
+    from classbot.prompts import FOCUS_NOTE
+    from classbot.search import FocusMaterial
+
+    hits = [SearchHit(f"S{i}", i, 7, "proxb_41.pdf", f"p.{i}", f"page {i}", 0.0, 1.0) for i in (1, 2, 3)]
+    focus = [FocusMaterial(7, "proxb_41.pdf", "thread", total_chunks=3, source_ids=["S1", "S2", "S3"])]
+    content = build_messages([], "今回の資料の内容は？", SearchResult(hits, "sufficient", focus),
+                             max_turns=6, max_chars=6000)[-1]["content"]
+    assert "<focus_materials>" in content and FOCUS_NOTE in content
+    assert "proxb_41.pdf（このスレッドで登録・指定された資料。全文3箇所を S1〜S3 として含めています）" in content
+    assert content.index("</focus_materials>") < content.index('<source id="S1"')
+    # 指している資料が無いときは何も足さない
+    plain = build_messages([], "q", SearchResult(hits, "sufficient"), max_turns=6, max_chars=6000)[-1]["content"]
+    assert "focus" not in plain

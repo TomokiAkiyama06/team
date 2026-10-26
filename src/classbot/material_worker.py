@@ -119,7 +119,7 @@ class MaterialWorker:
                 log.info("slack file already processed", extra={"file_id": fid})
                 continue
             try:
-                lines.append(await self._register_one(fid, p["user"], p.get("target_material_id")))
+                lines.append(await self._register_one(fid, p["user"], p.get("target_material_id"), notify))
             except (UnsupportedFileError, DownloadError) as e:
                 lines.append(f"❌ {e}")
             except Exception:
@@ -132,7 +132,10 @@ class MaterialWorker:
         if lines:
             await self._notify(notify, "\n".join(lines))
 
-    async def _register_one(self, file_id: str, user: str, target_id: int | None) -> str:
+    async def _register_one(self, file_id: str, user: str, target_id: int | None,
+                            thread: dict | None = None) -> str:
+        """thread（channel / thread_ts）を渡すと、登録・更新した資料をそのスレッドに対応付ける。
+        以後そのスレッドの質問では、この資料の全文を回答の根拠に使う。"""
         info = (await self.client.files_info(file=file_id))["file"]
         name = safe_filename(info.get("name") or info.get("title") or "file")
         file_type = detect_file_type(name)
@@ -154,6 +157,7 @@ class MaterialWorker:
                 if row["file_type"] != file_type:
                     raise UnsupportedFileError(f"{name}: 元の資料と形式が異なります（{row['file_type']} → {file_type}）。")
                 outcome = await self.db.run(self.indexer.replace_slack_file, target_id, tmp, name)
+                await self._link_thread(thread, target_id)
                 prefix = "更新" if outcome.status == "ready" else "更新失敗（旧版で検索を継続）"
                 return f"{_STATUS_MSG.get(outcome.status, outcome.status)} #{target_id} {name}: {prefix}" + \
                     (f" — {outcome.message}" if outcome.status != "ready" else f"（{outcome.chunk_count}チャンク）")
@@ -168,9 +172,19 @@ class MaterialWorker:
                 await self.db.run(self.store.remove_rows, mid)
                 dest.unlink(missing_ok=True)
                 return f"{_STATUS_MSG.get(outcome.status, outcome.status)} {name}: {outcome.message}"
+            await self._link_thread(thread, mid)
             return f"✅ #{mid} {name} を登録しました（{outcome.chunk_count}チャンク）。"
         finally:
             tmp.unlink(missing_ok=True)
+
+    async def _link_thread(self, thread: dict | None, material_id: int) -> None:
+        if not thread or not thread.get("thread_ts"):
+            return
+        try:
+            await self.db.run(self.store.link_thread, thread["channel"], thread["thread_ts"], material_id)
+        except Exception:
+            # 対応付けに失敗しても登録自体は有効（キーワード検索では見つかる）
+            log.exception("thread link failed", extra={"material_id": material_id})
 
     async def _download(self, url: str, dest: Path) -> None:
         """Slack のファイルを上限付きでストリーム保存する（slack_files に委譲）。"""

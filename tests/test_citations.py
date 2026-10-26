@@ -74,3 +74,13 @@ def test_footer_built_only_from_db_metadata():
     # 本文にモデルが書いたファイル名ではなく、検索ヒットのメタデータから出典を作る
     p = parse_answer("「架空資料.pdf p.99」によると[S1]\n[[SOURCES: S1]]", HITS)
     assert p.footer == "出典：第3回講義資料.pdf p.12 [S1]"
+
+
+def test_footer_one_line_per_material():
+    hits = [hit("S1", 7, "proxb_41.pdf", "p.1"), hit("S2", 7, "proxb_41.pdf", "p.3"),
+            hit("S3", 7, "proxb_41.pdf", "p.3"), hit("S4", 8, "課題提出方法.md", "")]
+    p = parse_answer("A[S1] B[S2][S3] C[S4]\n[[SOURCES: S1, S2, S3, S4]]", hits)
+    assert p.footer.splitlines() == [
+        "出典：proxb_41.pdf p.1 [S1]、p.3 [S2][S3]",
+        "出典：課題提出方法.md [S4]",
+    ]

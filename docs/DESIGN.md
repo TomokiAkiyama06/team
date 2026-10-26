@@ -94,10 +94,15 @@ class Scanner:
 @dataclass
 class SearchHit: source_id: str  # "S1".. ; chunk_id; material_id; display_name; location; text; score
 @dataclass
-class SearchResult: hits: list[SearchHit]; sufficiency: str  # "sufficient" | "weak" | "none"
+class FocusMaterial: material_id; display_name; reason  # "named" | "lecture" | "thread"; total_chunks; source_ids
+@dataclass
+class SearchResult: hits: list[SearchHit]; sufficiency: str; focus: list[FocusMaterial]  # "sufficient" | "weak" | "none"
 class Searcher:
     def __init__(self, db, settings)
-    def search(self, query: str, extra_context: str | None = None) -> SearchResult
+    # 回答用: 質問が指している資料の全文（上限 FOCUS_MATERIAL_MAX_CHARS）＋ 全資料のキーワード検索
+    def retrieve(self, query, extra_context=None, *, channel=None, thread_ts=None) -> SearchResult
+    def resolve_focus(self, query, channel=None, thread_ts=None) -> list[FocusMaterial]
+    def search(self, query: str, extra_context: str | None = None, exclude_chunk_ids=None) -> SearchResult
 
 # pricing.py
 class PriceTable: load(path) ; price_for(model) -> ModelPrice ; conservative() -> ModelPrice
