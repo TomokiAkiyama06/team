@@ -17,7 +17,7 @@ from classbot.pricing import PriceTable
 from classbot.prompts import FOCUS_NOTE, render_search_results
 from classbot.qa_worker import QAWorker
 from classbot.search import FOCUS_LATEST, FOCUS_LECTURE, FOCUS_NAMED, FOCUS_THREAD, Searcher
-from classbot.textnorm import query_tokens
+from classbot.textnorm import lecture_numbers, query_tokens
 from tests.test_search import add_material
 from tests.test_slack_flow import FakeLLM, FakeSlack
 
@@ -224,3 +224,37 @@ def test_question_with_generic_words_finds_relevant_chunk(db, settings):
     add_material(db, "proxb_41.pdf", [("p.5", None, "提出物: 自己紹介ページのスクリーンショット")])
     res = Searcher(db, settings).search(USER_QUESTION)
     assert [h.location for h in res.hits] == ["p.5"]
+
+
+# ---------------------------------------------------------------- 授業回の誤検出・授業回をまたぐ質問
+
+@pytest.mark.parametrize("text,expected", [
+    ("第4回の課題", {4}), ("第三回", {3}), ("3回目の資料", {3}),
+    ("lecture01.pdf", {1}), ("week 3", {3}), ("Lecture_12", {12}), ("w03_slides.pdf", {3}),
+    # ls -l の出力・URL・年号を授業回と誤認しない
+    ("-rw------- 1 root root 0 id_rsa", set()), ("drwxr-xr-x 2 user", set()),
+    ("www2.example.com", set()), ("w2024", set()),
+])
+def test_lecture_numbers(text, expected):
+    assert lecture_numbers(text) == expected
+
+
+def test_pasted_ls_output_does_not_pull_lecture_material(db, settings):
+    add_material(db, "第01回_ガイダンス.pdf", [("p.1", None, "授業の進め方")])
+    q = "ssh で鍵が使えません\n-rw------- 1 student student 411 id_ed25519\n-rw-r--r-- 1 student student 99 id_ed25519.pub"
+    assert Searcher(db, settings).resolve_focus(q) == []
+
+
+def test_question_across_all_lectures_gets_every_assignment(db, settings):
+    """「これまでの課題を全部」は授業回の数だけ断片が要る（既定の件数上限で全15回分を渡せる）。"""
+    topics = ["Linux", "シェル", "権限", "SSH", "Apache", "Nginx", "HTML", "CSS", "PHP", "MySQL",
+              "WordPress", "DNS", "TLS", "Docker", "Git"]
+    for n, topic in enumerate(topics, 1):
+        add_material(db, f"第{n:02d}回.pdf", [
+            ("p.1", None, f"第{n}回 {topic} の基礎。今回は{topic}の仕組みと使い方を学びます。"),
+            ("p.2", None, f"{topic} の操作例と注意点。演習環境で{topic}を動かしてみましょう。"),
+            ("p.3", None, f"第{n}回の課題: {topic}についてレポートを作成し、提出物としてPDFをLMSに出すこと。"),
+        ])
+    res = Searcher(db, settings).retrieve("これまでの課題の提出物を全部教えて")
+    assignments = {h.display_name for h in res.hits if "の課題:" in h.text}
+    assert len(assignments) == 15

@@ -93,5 +93,7 @@ def lecture_numbers(text: str) -> set[int]:
     norm = normalize(text)
     nums = re.findall(r"第\s*([0-9]{1,3})\s*[回章週講節]", norm)
     nums += re.findall(r"([0-9]{1,3})\s*回目", norm)
-    nums += re.findall(r"(?:lecture|week|lec|w)[\s_-]*([0-9]{1,3})", norm)
+    # 英字表記（lecture3 / week 3 / w03）は単語の先頭に限る。ls -l の「-rw------- 1」や「www2」を
+    # 授業回と誤認すると、ログを貼った質問でその回の資料全文を渡してしまうため
+    nums += re.findall(r"(?<![a-z0-9])(?:lecture|week|lec|w)[\s_-]?([0-9]{1,3})(?![0-9])", norm)
     return {int(n) for n in nums}

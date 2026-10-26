@@ -193,5 +193,6 @@ docker compose logs -f classbot         # 起動ログを確認
 - 抽出ロジックに変更がある場合は `classbot reindex --force` を実行します（検索の正規化ルールの変更は起動時に自動で再インデックスされます）。
 - モデルを変更する場合は `config/pricing.toml` に単価があることを確認してから `CLAUDE_MODEL` を変更します。
 - `.env` に書かれた値はコードの既定値より優先されます。`.env.example` の既定値が変わった項目（例: 検索量を増やした版の
-  `SEARCH_TOP_K=10` / `SEARCH_MAX_PER_MATERIAL=5` / `SEARCH_CONTEXT_MAX_CHARS=24000` / `FOCUS_MATERIAL_MAX_CHARS=60000`）は、
+  `SEARCH_TOP_K=30` / `SEARCH_MAX_PER_MATERIAL=10` / `SEARCH_CONTEXT_MAX_CHARS=40000` / `FOCUS_MATERIAL_MAX_CHARS=100000` /
+  `HISTORY_MAX_TURNS=20` / `HISTORY_MAX_CHARS=30000` / `QUESTION_MAX_CHARS=8000`）は、
   `.env` を見比べて必要なら更新してください。

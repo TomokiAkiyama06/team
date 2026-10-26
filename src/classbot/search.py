@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 # bm25 の列重み（title_tokens, body_tokens）
 TITLE_WEIGHT = 4.0
 BODY_WEIGHT = 1.0
-CANDIDATE_LIMIT = 80
+CANDIDATE_LIMIT = 300
 NEAR_DUP_JACCARD = 0.8
 SUFFICIENT_COVERAGE = 0.5
 MIN_COVERAGE = 0.15
