@@ -15,6 +15,7 @@ from classbot.config import Settings
 from classbot.db import Database, now_iso
 from classbot.jobs import KIND_QA, Job, JobQueue
 from classbot.llm import ClaudeClient, LLMError
+from classbot.materials import link_thread
 from classbot.safety import mask_secrets, sanitize_for_slack
 from classbot.prompts import (ImageInput, build_messages_with_images, build_system_prompt,
                               estimate_input_chars)
@@ -132,7 +133,8 @@ class QAWorker:
             imgs = [None if i is None else await self._image_input(i) for i in turn_images.get(r["id"], [])]
             history.append({"role": r["role"], "text": r["text"], "images": imgs})
         prev_q = next((h["text"] for h in reversed(history) if h["role"] == "user"), None)
-        result = await self.db.run(self.searcher.search, question, prev_q)
+        result = await self.db.run(lambda: self.searcher.retrieve(question, prev_q, channel=channel,
+                                                                  thread_ts=thread_ts))
         system = build_system_prompt(self.s.system_prompt_file)
         current = [await self._image_input(i) for i in stored]
         messages, image_tokens = build_messages_with_images(
@@ -185,13 +187,14 @@ class QAWorker:
             body += "\n\n" + "\n".join(f"※ {n}" for n in image_notes)
         log.info("answered", extra={"user": user, "model": resp.model, "cost_usd": round(cost, 5),
                                     "hits": len(result.hits), "sufficiency": result.sufficiency,
+                                    "focus": [f.material_id for f in result.focus],
                                     "images": n_images, "image_tokens_est": image_tokens,
                                     "request_id": resp.request_id})
 
         # モデル出力中の <!channel> や <@U…>・偽装リンクを無効化してから mrkdwn に変換する
         text = md_to_mrkdwn(sanitize_for_slack(body))
         await self.db.run(self._save_answer, key, channel, thread_ts, user, question, stored_text, text,
-                          [i.id for i in stored])
+                          [i.id for i in stored], [f.material_id for f in result.focus])
         await self._deliver(key, channel, msg_ts, thread_ts, text)
         if stored and self.s.image_retention_hours <= 0:
             # 保存期間 0: 回答を届けたらすぐ削除（スレッドの追加質問では参照できなくなる）
@@ -272,9 +275,13 @@ class QAWorker:
             "updated_at=excluded.updated_at", (key, text, now_iso()))
 
     def _save_answer(self, key: str, channel: str, thread_ts: str, user: str, question: str,
-                     stored: str, text: str, image_ids: list[int] | None = None) -> None:
-        """会話履歴と送信予定の本文を 1 トランザクションで保存する。"""
+                     stored: str, text: str, image_ids: list[int] | None = None,
+                     focus_ids: list[int] | None = None) -> None:
+        """会話履歴と送信予定の本文を 1 トランザクションで保存する。
+        質問が指していた資料はスレッドに対応付け、追加質問（「それの提出期限は？」など）でも全文を参照する。"""
         with self.db.tx() as conn:
+            for mid in focus_ids or []:
+                link_thread(conn, channel, thread_ts, mid)
             ts = now_iso()
             cur = conn.execute("INSERT INTO conversation_turns(channel, thread_ts, role, user_id, text, created_at) "
                                "VALUES (?, ?, 'user', ?, ?, ?)", (channel, thread_ts, user, question, ts))

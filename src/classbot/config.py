@@ -70,12 +70,15 @@ class Settings(BaseSettings):
     use_watchdog: bool = True
 
     # --- 検索・会話 ---
-    search_top_k: int = 6
-    search_max_per_material: int = 3
-    search_context_max_chars: int = 12000
-    history_max_turns: int = 6
-    history_max_chars: int = 6000
-    question_max_chars: int = 2000
+    search_top_k: int = 30
+    search_max_per_material: int = 10
+    search_context_max_chars: int = 40000
+    # 質問が指している資料（スレッドで登録した資料・ファイル名や授業回で指定された資料）の
+    # 全文を渡す上限（文字数、検索結果とは別枠）。超える資料は質問に近い部分を上限まで渡す
+    focus_material_max_chars: int = 100000
+    history_max_turns: int = 20
+    history_max_chars: int = 30000
+    question_max_chars: int = 8000
 
     # --- 画像入力（学生の画像付き質問） ---
     image_input_enabled: bool = True

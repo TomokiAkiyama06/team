@@ -38,6 +38,12 @@ def delete_chunks(conn: sqlite3.Connection, material_id: int, version: int | Non
     return cur.rowcount
 
 
+def link_thread(conn: sqlite3.Connection, channel: str, thread_ts: str, material_id: int) -> None:
+    """資料をスレッドに対応付ける（既にあれば何もしない）。"""
+    conn.execute("INSERT OR IGNORE INTO thread_materials(channel, thread_ts, material_id, created_at) "
+                 "VALUES (?, ?, ?, ?)", (channel, thread_ts, material_id, now_iso()))
+
+
 class MaterialStore:
     def __init__(self, db: Database, settings: Settings):
         self.db = db
@@ -105,6 +111,10 @@ class MaterialStore:
         self.db.execute("UPDATE materials SET status = ?, last_error = ?, updated_at = ? "
                         "WHERE id = ?", (status, error, now_iso(), material_id))
 
+    def link_thread(self, channel: str, thread_ts: str, material_id: int) -> None:
+        """資料をスレッドに対応付ける（そのスレッドの質問で全文を参照する）。"""
+        link_thread(self.db.connect(), channel, thread_ts, material_id)
+
     # --- 削除 ---
     def move_to_trash(self, path: Path) -> Path | None:
         """ファイルを trash へ移動する（存在しなければ None）。同名衝突は時刻で回避。"""
@@ -124,6 +134,7 @@ class MaterialStore:
         """行・チャンク・FTS を削除する（ファイルには触れない）。"""
         with self.db.tx() as conn:
             delete_chunks(conn, material_id)
+            conn.execute("DELETE FROM thread_materials WHERE material_id = ?", (material_id,))
             conn.execute("DELETE FROM materials WHERE id = ?", (material_id,))
 
     def delete(self, material_id: int) -> sqlite3.Row | None:

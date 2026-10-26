@@ -209,6 +209,16 @@ CREATE TABLE IF NOT EXISTS image_requests (
     est_image_tokens INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+-- スレッドと資料の対応。そのスレッドで登録・更新した資料や、質問で指定された資料を記録し、
+-- 同じスレッドの質問（「この資料」「今回の資料」など）ではその資料の全文を回答の根拠に使う
+CREATE TABLE IF NOT EXISTS thread_materials (
+    channel TEXT NOT NULL,
+    thread_ts TEXT NOT NULL,
+    material_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (channel, thread_ts, material_id)
+);
+CREATE INDEX IF NOT EXISTS ix_thread_materials_material ON thread_materials(material_id);
 CREATE TABLE IF NOT EXISTS recent_admin_files (
     file_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

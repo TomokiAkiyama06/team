@@ -117,7 +117,10 @@ def test_system_prompt_policies(settings):
         "必要な情報",                                                       # 6
         "スクリーンショット",                                               # 5
         "出典IDの付いていない部分は一般的な知識",                          # 8
-        "毎回冒頭で断る必要はありません",                                   # 9
+        "第一優先は登録された授業資料、第二優先はあなた（AI）自身の知識",   # 9 資料 → AI の知識の優先順位
+        "*補足（AIの一般知識）*",                                            #   AI の知識で補った部分を区別
+        "断り書きや「次にできること」の案内だけで回答を終えてはいけません",
+        "それぞれに答えます",                                                #   複数の質問の一部で止めない
         "根拠がない場合は推測で答えず",                                     # 10
         "バックアップ",                                                     # 11
         "伏せる",                                                           # 12
@@ -132,10 +135,14 @@ def test_system_prompt_policies(settings):
 
 def test_default_prompt_and_notes_do_not_force_refusal():
     assert "あなた自身の知識" in DEFAULT_SYSTEM_PROMPT
-    for key in ("weak", "none"):
-        assert "一般的な知識" in SUFFICIENCY_NOTES[key] or "あなた自身の知識" in SUFFICIENCY_NOTES[key]
+    assert "第一優先は登録された授業資料" in DEFAULT_SYSTEM_PROMPT
+    for key in ("sufficient", "weak", "none"):
+        assert "AIの一般知識" in SUFFICIENCY_NOTES[key]
         assert "「登録された資料からは確認できませんでした」と明示" not in SUFFICIENCY_NOTES[key]
-    assert "冒頭で断る必要はありません" in SUFFICIENCY_NOTES["none"]
+    assert "断り書きや確認の依頼だけで回答を終えないでください" in SUFFICIENCY_NOTES["none"]
+    # 授業固有の質問でも、資料に無い値を作らないだけで、他の部分や一般的な補足は答える
+    assert "作り出さず" in COURSE_SPECIFIC_NOTE
+    assert "省略せずに答えてください" in COURSE_SPECIFIC_NOTE
 
 
 # ---------------------------------------------------------------- 資料にない技術的な質問
