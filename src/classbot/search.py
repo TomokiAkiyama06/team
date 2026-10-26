@@ -136,10 +136,19 @@ class Searcher:
         picked: dict[int, str] = {}
 
         nq = normalize(query)
+        spans: dict[int, list[tuple[int, int]]] = {}
         for r in rows:
-            stem = normalize(Path(r["display_name"]).stem).strip()
-            if (len(stem) >= MIN_NAMED_STEM and stem in nq) or normalize(r["display_name"]) in nq:
-                picked.setdefault(r["id"], FOCUS_NAMED)
+            for name in {normalize(Path(r["display_name"]).stem).strip(), normalize(r["display_name"])}:
+                if len(name) < MIN_NAMED_STEM:
+                    continue
+                # 英数字が続く位置では一致させない（「lecture10」の中の「lecture1」）
+                for m in re.finditer(rf"(?<![0-9a-z]){re.escape(name)}(?![0-9a-z])", nq):
+                    spans.setdefault(r["id"], []).append(m.span())
+        named_spans = [sp for sps in spans.values() for sp in sps]
+        for mid, sps in spans.items():
+            # 別の資料のより長い名前の一部としてだけ一致した資料は選ばない（予算を先に使い切らせない）
+            if any(not any(o != sp and o[0] <= sp[0] and sp[1] <= o[1] for o in named_spans) for sp in sps):
+                picked.setdefault(mid, FOCUS_NAMED)
 
         q_lectures = lecture_numbers(query)
         if q_lectures:

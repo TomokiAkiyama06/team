@@ -258,3 +258,19 @@ def test_question_across_all_lectures_gets_every_assignment(db, settings):
     res = Searcher(db, settings).retrieve("これまでの課題の提出物を全部教えて")
     assignments = {h.display_name for h in res.hits if "の課題:" in h.text}
     assert len(assignments) == 15
+
+
+def test_named_file_prefers_exact_name_over_prefix(db, settings):
+    """lecture10.pdf を指定したとき、名前が前方一致する lecture1.pdf を選ばない（PR #1 レビュー指摘）。"""
+    short = add_material(db, "lecture1.pdf", [("p.1", None, "あ" * 800)])
+    long_ = add_material(db, "lecture10.pdf", [("p.1", None, "第10回の課題はレポート")])
+    s = Searcher(db, settings)
+    for q in ("lecture10.pdf の内容は？", "lecture10 の内容は？"):
+        assert [f.material_id for f in s.resolve_focus(q) if f.reason == FOCUS_NAMED] == [long_], q
+    # 予算を先に使い切られず、指定した資料の全文が渡る
+    settings.focus_material_max_chars = 800
+    res = s.retrieve("lecture10.pdf の内容は？")
+    assert [(f.material_id, f.complete) for f in res.focus] == [(long_, True)]
+    # 両方を指定すれば両方を選ぶ
+    both = s.resolve_focus("lecture1.pdf と lecture10.pdf を比較して")
+    assert {f.material_id for f in both if f.reason == FOCUS_NAMED} == {short, long_}
