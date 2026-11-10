@@ -348,7 +348,7 @@ class SlackHandlers:
         if cmd.name == commands.HELP:
             await self._reply(client, channel, thread_ts, commands.HELP_TEXT.format(
                 bot=f"<@{self.bot_user_id}>" if self.bot_user_id else "ボット",
-                daily=self.s.daily_request_limit_per_user, images=self.s.image_max_per_message))
+                daily=self.s.daily_limit_label, images=self.s.image_max_per_message))
 
         elif cmd.name == commands.LIST:
             page = cmd.int_arg() or 1

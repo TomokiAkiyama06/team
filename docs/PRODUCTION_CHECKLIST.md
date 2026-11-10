@@ -72,7 +72,7 @@ chmod 600 .env
   | `CLAUDE_MODEL` | `claude-sonnet-5-5`（既定） |
   | `CLAUDE_EFFORT` | `medium`（既定） |
   | `CLAUDE_REFUSAL_FALLBACK` | `false`（既定。[COST.md](COST.md) 参照） |
-  | `DAILY_REQUEST_LIMIT_PER_USER` | 例 `30` |
+  | `DAILY_REQUEST_LIMIT_PER_USER` | 例 `30`（`0` で無制限） |
   | `MONTHLY_BUDGET_USD` | 例 `20` |
   | `MAX_CONCURRENT_REQUESTS` | 例 `3` |
   | `TIMEZONE` | `Asia/Tokyo`（日次・月次の区切り） |

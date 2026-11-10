@@ -33,6 +33,16 @@ def test_daily_limit(bm, settings):
     assert isinstance(bm.reserve("U2", "C123", None, 1000), Reservation)
 
 
+
+def test_daily_limit_zero_means_unlimited(bm, settings):
+    settings.daily_request_limit_per_user = 0
+    for _ in range(5):
+        r = bm.reserve("U1", "C123", "1.0", 1000)
+        assert isinstance(r, Reservation)
+        bm.settle(r, "claude-opus-5-5", Usage(100, 100))
+    assert bm.check_daily("U1", False)[0] is True
+    assert settings.daily_limit_label == "無制限"
+
 def test_concurrent_reservations_respect_budget(settings):
     settings.monthly_budget_usd = 1.0
     settings.claude_max_tokens = 8000  # 予約 ≈ 8000*20/1M = 0.16 + 入力分
