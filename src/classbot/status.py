@@ -41,7 +41,7 @@ def format_usage(s: UsageSummary, settings: Settings, top: int = 10,
         lines.append(f"*ユーザー別（今月・上位{top}）*")
         lines += [f"• <@{u.user_id}>: 今日 {u.today_requests}件 / 今月 {u.month_requests}件 / ${u.month_cost_usd:.3f}"
                   for u in s.users[:top]]
-    lines.append(f"上限: 1人1日 {settings.daily_request_limit_per_user}回 / 同時実行 {settings.max_concurrent_requests}")
+    lines.append(f"上限: 1人1日 {settings.daily_limit_label} / 同時実行 {settings.max_concurrent_requests}")
     lines.append(USAGE_DISCLAIMER)
     return "\n".join(lines)
 

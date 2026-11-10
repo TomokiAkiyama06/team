@@ -40,11 +40,20 @@ class Settings(BaseSettings):
     claude_prompt_cache: bool = True
 
     # --- コスト管理 ---
-    daily_request_limit_per_user: int = 30
+    # 0 以下で無制限（月額予算の上限は引き続き適用される）
+    daily_request_limit_per_user: int = 0
     monthly_budget_usd: float = 20.0
     max_concurrent_requests: int = 3
     admins_exempt_from_daily_limit: bool = True
     max_pending_per_user: int = 2
+
+    @property
+    def daily_limit_enabled(self) -> bool:
+        return self.daily_request_limit_per_user > 0
+
+    @property
+    def daily_limit_label(self) -> str:
+        return f"{self.daily_request_limit_per_user}回" if self.daily_limit_enabled else "無制限"
     # 入力トークン数の保守的推定に使う係数（1文字あたりのトークン数の上限見積もり）
     token_estimate_per_char: float = 1.2
     pricing_file: Path = Path("config/pricing.toml")

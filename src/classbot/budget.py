@@ -132,7 +132,7 @@ class BudgetManager:
         """(許可するか, 本日の利用回数, 上限)。受付時の早期判定用（確定判定は reserve）。"""
         limit = self.settings.daily_request_limit_per_user
         used = self._daily_count(self.db.connect(), user_id)
-        if is_admin and self.settings.admins_exempt_from_daily_limit:
+        if not self.settings.daily_limit_enabled or (is_admin and self.settings.admins_exempt_from_daily_limit):
             return True, used, limit
         return used < limit, used, limit
 
@@ -151,7 +151,8 @@ class BudgetManager:
         amount = self.estimate_cost(est_input_tokens)
         limit = self.settings.daily_request_limit_per_user
         with self.db.tx() as conn:
-            exempt = is_admin and self.settings.admins_exempt_from_daily_limit
+            exempt = (not self.settings.daily_limit_enabled
+                      or (is_admin and self.settings.admins_exempt_from_daily_limit))
             used = self._daily_count(conn, user_id)
             rejection: Rejection | None = None
             if not exempt and used >= limit:
